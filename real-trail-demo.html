@@ -137,17 +137,14 @@
             // Create popup content
             const popupContent = `
                 <div class="obstruction-popup">
-                    <h3>
-                        ${icon} ${obstruction.type}
-                        <span class="alert-badge alert-${obstruction.alertLevel.toLowerCase()}">${obstruction.alertLevel.toUpperCase()}</span>
-                    </h3>
+                    <h3>${icon} ${obstruction.type}</h3>
+                    <p><strong>Alert level:</strong> <span class="alert-badge alert-${obstruction.alertLevel.toLowerCase()}">${obstruction.alertLevel.toUpperCase()}</span></p>
                     <p><strong>Reported:</strong> ${new Date(obstruction.reportedDate).toLocaleDateString('en-US', { 
                         year: 'numeric', 
                         month: 'long', 
                         day: 'numeric' 
                     })}</p>
-                    <p><strong>Location:</strong> ${obstruction.lat.toFixed(6)}, ${obstruction.lng.toFixed(6)}</p>
-                    ${obstruction.description ? `<p><strong>Details:</strong> ${obstruction.description}</p>` : ''}
+                    <p><strong>Location:</strong> <a href="https://www.google.com/maps?q=${obstruction.lat},${obstruction.lng}" target="_blank" style="color: #1976d2; text-decoration: none;">${obstruction.lat.toFixed(6)}, ${obstruction.lng.toFixed(6)}</a></p>
                 </div>
             `;
 
@@ -195,8 +192,7 @@
                             alertLevel: 'High',
                             reportedDate: '2025-07-21T12:00:00Z',
                             lat: 36.42839251143055,
-                            lng: -94.22220075189334,
-                            description: 'Large tree blocking the trail path'
+                            lng: -94.22220075189334
                         };
 
                         createObstructionMarker(sampleObstruction);
