@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trail Map</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        
+        .custom-popup {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .custom-popup h3 {
+            margin: 0 0 8px 0;
+            color: #ff6b35;
+            font-size: 14px;
+        }
+        
+        .custom-popup p {
+            margin: 4px 0;
+            font-size: 12px;
+            color: #333;
+        }
+        
+        .obstruction-icon {
+            background: #ff6b35;
+            border: 2px solid white;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    
+    <script>
+        // Get URL parameters for customization
+        const urlParams = new URLSearchParams(window.location.search);
+        const trailId = urlParams.get('trail') || 'default';
+        const lat = parseFloat(urlParams.get('lat')) || 36.4734;
+        const lng = parseFloat(urlParams.get('lng')) || -94.1389;
+        const zoom = parseInt(urlParams.get('zoom')) || 15;
+
+        // Initialize the map
+        const map = L.map('map', {
+            zoomControl: true,
+            attributionControl: true
+        }).setView([lat, lng], zoom);
+
+        // Add OpenStreetMap tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Trail data structure
+        let currentTrail = null;
+        let obstructionMarkers = [];
+
+        // Create custom icons
+        const obstructionIcon = L.divIcon({
+            className: 'obstruction-marker',
+            html: '<div class="obstruction-icon">!</div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
+        const startIcon = L.divIcon({
+            className: 'trail-marker',
+            html: '<div style="background: #4CAF50; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; font-size: 12px;">S</div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+        });
+
+        const endIcon = L.divIcon({
+            className: 'trail-marker',
+            html: '<div style="background: #f44336; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; font-size: 12px;">E</div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+        });
+
+        // Function to load trail data
+        function loadTrailData(trailData) {
+            // Clear existing trail and markers
+            if (currentTrail) {
+                map.removeLayer(currentTrail);
+            }
+            obstructionMarkers.forEach(marker => map.removeLayer(marker));
+            obstructionMarkers = [];
+
+            // Add trail path
+            if (trailData.coordinates && trailData.coordinates.length > 0) {
+                currentTrail = L.polyline(trailData.coordinates, {
+                    color: trailData.color || '#ff6b35',
+                    weight: 4,
+                    opacity: 0.8,
+                    smoothFactor: 1
+                }).addTo(map);
+
+                // Add start marker
+                L.marker(trailData.coordinates[0], { icon: startIcon })
+                    .addTo(map)
+                    .bindPopup(`<div class="custom-popup"><h3>Trail Start</h3><p>${trailData.name}</p></div>`);
+
+                // Add end marker
+                L.marker(trailData.coordinates[trailData.coordinates.length - 1], { icon: endIcon })
+                    .addTo(map)
+                    .bindPopup(`<div class="custom-popup"><h3>Trail End</h3><p>${trailData.name}</p></div>`);
+
+                // Fit map to trail bounds
+                map.fitBounds(currentTrail.getBounds(), { padding: [10, 10] });
+            }
+
+            // Add obstruction markers
+            if (trailData.obstructions) {
+                trailData.obstructions.forEach(obstruction => {
+                    const marker = L.marker([obstruction.lat, obstruction.lng], { icon: obstructionIcon })
+                        .addTo(map)
+                        .bindPopup(`
+                            <div class="custom-popup">
+                                <h3>⚠ ${obstruction.type}</h3>
+                                <p>
