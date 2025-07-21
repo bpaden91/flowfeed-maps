@@ -52,8 +52,8 @@
     </div>
     
     <div class="trail-info">
-        <h2>Multi-Segment Trail Test</h2>
-        <p><strong>Segments:</strong> 4 ways</p>
+        <h2>"It'll Bluff Out" Trail</h2>
+        <p><strong>Segments:</strong> 4 OpenStreetMap ways</p>
         <p><strong>Way IDs:</strong></p>
         <ul style="font-size: 12px; margin: 5px 0; padding-left: 20px;">
             <li>1313648209</li>
@@ -119,114 +119,80 @@
                 const data = await response.json();
                 
                 if (data.elements && data.elements.length > 0) {
-                    // Collect all coordinates from all ways
-                    let allCoordinates = [];
-                    let segmentColors = ['#ff6b35', '#4CAF50', '#2196F3', '#9C27B0']; // Different colors for each segment
+                    const trailColor = '#ff6b35'; // Consistent orange color for all segments
+                    let totalCoordinates = 0;
+                    let allBounds = [];
                     
-                    // Sort ways by ID to maintain consistent order
-                    const sortedWays = data.elements.sort((a, b) => a.id - b.id);
-                    
-                    // First, draw each segment in a different color for visualization
-                    sortedWays.forEach((way, index) => {
+                    // Simply draw each segment individually
+                    data.elements.forEach((way, index) => {
                         if (way.geometry && way.geometry.length > 0) {
                             const coordinates = way.geometry.map(point => [point.lat, point.lon]);
+                            totalCoordinates += coordinates.length;
                             
-                            // Draw individual segment
+                            // Add coordinates to bounds calculation
+                            allBounds = allBounds.concat(coordinates);
+                            
+                            // Draw the trail segment
                             L.polyline(coordinates, {
-                                color: segmentColors[index] || '#ff6b35',
-                                weight: 6,
-                                opacity: 0.6
-                            }).addTo(map).bindPopup(`Segment ${index + 1}<br>Way ID: ${way.id}<br>Points: ${coordinates.length}`);
+                                color: trailColor,
+                                weight: 4,
+                                opacity: 0.8
+                            }).addTo(map).bindPopup(`
+                                <strong>"It'll Bluff Out" - Segment ${index + 1}</strong><br>
+                                Way ID: ${way.id}<br>
+                                Points: ${coordinates.length}<br>
+                                Length: ~${getTrailLength(coordinates).toFixed(2)} km<br>
+                                Start: ${coordinates[0][0].toFixed(6)}, ${coordinates[0][1].toFixed(6)}<br>
+                                End: ${coordinates[coordinates.length-1][0].toFixed(6)}, ${coordinates[coordinates.length-1][1].toFixed(6)}
+                            `);
+
+                            // Add a sample obstruction on some segments
+                            if (index === 1) { // Add obstruction to second segment
+                                const midPoint = Math.floor(coordinates.length / 2);
+                                createObstructionMarker({
+                                    type: 'Fallen tree/branch',
+                                    alertLevel: 'High',
+                                    reportedDate: '2025-07-21T12:00:00Z',
+                                    lat: coordinates[midPoint][0],
+                                    lng: coordinates[midPoint][1]
+                                });
+                            }
+                            
+                            if (index === 3) { // Add obstruction to fourth segment
+                                const quarterPoint = Math.floor(coordinates.length / 4);
+                                createObstructionMarker({
+                                    type: 'Trail damage',
+                                    alertLevel: 'Medium',
+                                    reportedDate: '2025-07-20T08:00:00Z',
+                                    lat: coordinates[quarterPoint][0],
+                                    lng: coordinates[quarterPoint][1]
+                                });
+                            }
                         }
+                    });
+
+                    // Update UI
+                    document.getElementById('coords-count').innerHTML = `
+                        ${totalCoordinates} total GPS coordinates<br>
+                        <small>Segments displayed: ${data.elements.length}</small><br>
+                        <small>Trail: "It'll Bluff Out"</small>
+                    `;
+                    
+                    // Fit map to show all segments
+                    if (allBounds.length > 0) {
+                        const bounds = L.latLngBounds(allBounds);
+                        map.fitBounds(bounds, { padding: [20, 20] });
+                    }
+                    
+                    // Hide loading indicator
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    console.log('Trail segments loaded:', {
+                        totalSegments: data.elements.length,
+                        totalCoordinates: totalCoordinates,
+                        wayIds: testWayIds
                     });
                     
-                    // Now connect all segments into one trail
-                    sortedWays.forEach(way => {
-                        if (way.geometry && way.geometry.length > 0) {
-                            const coordinates = way.geometry.map(point => [point.lat, point.lon]);
-                            
-                            // Check if we need to connect this segment to the previous one
-                            if (allCoordinates.length > 0) {
-                                const lastPoint = allCoordinates[allCoordinates.length - 1];
-                                const firstPoint = coordinates[0];
-                                const lastToFirst = getDistance(lastPoint, firstPoint);
-                                const lastToLast = getDistance(lastPoint, coordinates[coordinates.length - 1]);
-                                
-                                // If the last point of previous segment is closer to the last point
-                                // of this segment, reverse this segment
-                                if (lastToLast < lastToFirst) {
-                                    coordinates.reverse();
-                                    console.log(`Reversed segment ${way.id} for better connection`);
-                                }
-                                
-                                // Remove duplicate point if segments connect
-                                if (lastToFirst < 0.01 || lastToLast < 0.01) { // ~1km tolerance for testing
-                                    coordinates.shift(); // Remove first point to avoid duplication
-                                    console.log(`Removed duplicate point for segment ${way.id}`);
-                                }
-                            }
-                            
-                            allCoordinates = allCoordinates.concat(coordinates);
-                        }
-                    });
-
-                    if (allCoordinates.length > 0) {
-                        // Create combined trail path (white outline for visibility)
-                        const combinedTrail = L.polyline(allCoordinates, {
-                            color: '#FFFFFF',
-                            weight: 8,
-                            opacity: 0.8
-                        }).addTo(map);
-
-                        // Add black center line
-                        L.polyline(allCoordinates, {
-                            color: '#000000',
-                            weight: 2,
-                            opacity: 1.0
-                        }).addTo(map).bindPopup(`Combined Trail<br>Total segments: ${testWayIds.length}<br>Total points: ${allCoordinates.length}`);
-
-                        // Add sample obstructions on different segments
-                        const sampleObstructions = [
-                            {
-                                type: 'Fallen tree/branch',
-                                alertLevel: 'High',
-                                reportedDate: '2025-07-21T12:00:00Z',
-                                lat: allCoordinates[Math.floor(allCoordinates.length * 0.2)][0],
-                                lng: allCoordinates[Math.floor(allCoordinates.length * 0.2)][1]
-                            },
-                            {
-                                type: 'Trail damage',
-                                alertLevel: 'Medium',
-                                reportedDate: '2025-07-20T08:00:00Z',
-                                lat: allCoordinates[Math.floor(allCoordinates.length * 0.7)][0],
-                                lng: allCoordinates[Math.floor(allCoordinates.length * 0.7)][1]
-                            }
-                        ];
-
-                        // Add obstruction markers
-                        sampleObstructions.forEach(obstruction => {
-                            createObstructionMarker(obstruction);
-                        });
-
-                        // Update UI
-                        document.getElementById('coords-count').textContent = 
-                            `${allCoordinates.length} total GPS coordinates loaded`;
-                        
-                        // Fit map to show the entire trail
-                        map.fitBounds(combinedTrail.getBounds(), { padding: [20, 20] });
-                        
-                        // Hide loading indicator
-                        document.getElementById('loading').style.display = 'none';
-                        
-                        console.log('Multi-segment trail loaded:', {
-                            segments: testWayIds.length,
-                            totalPoints: allCoordinates.length,
-                            wayIds: testWayIds
-                        });
-                        
-                    } else {
-                        throw new Error('No geometry data found for any trail segments');
-                    }
                 } else {
                     throw new Error('No trail segments found');
                 }
@@ -237,6 +203,15 @@
                     `<strong>Error:</strong> Could not load trail data<br>
                      <small>${error.message}</small>`;
             }
+        }
+
+        // Helper function to calculate trail length for individual segments
+        function getTrailLength(coordinates) {
+            let totalDistance = 0;
+            for (let i = 1; i < coordinates.length; i++) {
+                totalDistance += getDistance(coordinates[i-1], coordinates[i]);
+            }
+            return totalDistance;
         }
 
         // Function to create obstruction marker
