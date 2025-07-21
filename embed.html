@@ -59,7 +59,19 @@
     <script>
         // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
-        const wayId = urlParams.get('wayId') || '1065947564';
+        const wayIdParam = urlParams.get('wayId');
+        const wayIdsParam = urlParams.get('wayIds');
+        
+        // Support both single wayId and multiple wayIds from URL
+        let defaultWayIds;
+        if (wayIdsParam) {
+            defaultWayIds = wayIdsParam.split(',').map(id => id.trim());
+        } else if (wayIdParam) {
+            defaultWayIds = [wayIdParam];
+        } else {
+            defaultWayIds = ['1065947564']; // Default fallback
+        }
+        
         const lat = parseFloat(urlParams.get('lat')) || 36.4734;
         const lng = parseFloat(urlParams.get('lng')) || -94.1389;
         const zoom = parseInt(urlParams.get('zoom')) || 15;
@@ -144,12 +156,36 @@
             return marker;
         }
 
-        // Function to load trail data
-        async function loadTrailData(trailWayId, obstructions = []) {
+        // Helper function to calculate distance between two points
+        function getDistance(point1, point2) {
+            const lat1 = point1[0], lon1 = point1[1];
+            const lat2 = point2[0], lon2 = point2[1];
+            const R = 6371; // Earth's radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * R;
+        }
+
+        // Function to load trail data (supports multiple way IDs)
+        async function loadTrailData(wayIds, obstructions = []) {
             try {
+                // Clear existing obstructions
+                obstructionMarkers.forEach(marker => map.removeLayer(marker));
+                obstructionMarkers = [];
+
+                // Handle single way ID or array of way IDs
+                const wayIdArray = Array.isArray(wayIds) ? wayIds : [wayIds];
+                
+                // Build query for multiple ways
+                const wayQueries = wayIdArray.map(id => `way(${id});`).join('');
                 const query = `
                     [out:json][timeout:25];
-                    way(${trailWayId});
+                    (
+                        ${wayQueries}
+                    );
                     out geom;
                 `;
                 
@@ -164,19 +200,47 @@
                 const data = await response.json();
                 
                 if (data.elements && data.elements.length > 0) {
-                    const way = data.elements[0];
-                    
-                    if (way.geometry && way.geometry.length > 0) {
-                        // Clear existing trail
-                        if (currentTrail) {
-                            map.removeLayer(currentTrail);
-                        }
+                    // Clear existing trail
+                    if (currentTrail) {
+                        map.removeLayer(currentTrail);
+                    }
 
-                        // Convert coordinates to Leaflet format
-                        const coordinates = way.geometry.map(point => [point.lat, point.lon]);
-                        
-                        // Create trail path
-                        currentTrail = L.polyline(coordinates, {
+                    // Collect all coordinates from all ways
+                    let allCoordinates = [];
+                    
+                    // Sort ways by ID to maintain consistent order
+                    const sortedWays = data.elements.sort((a, b) => a.id - b.id);
+                    
+                    sortedWays.forEach(way => {
+                        if (way.geometry && way.geometry.length > 0) {
+                            const coordinates = way.geometry.map(point => [point.lat, point.lon]);
+                            
+                            // Check if we need to connect this segment to the previous one
+                            if (allCoordinates.length > 0) {
+                                const lastPoint = allCoordinates[allCoordinates.length - 1];
+                                const firstPoint = coordinates[0];
+                                const lastToFirst = getDistance(lastPoint, firstPoint);
+                                const lastToLast = getDistance(lastPoint, coordinates[coordinates.length - 1]);
+                                
+                                // If the last point of previous segment is closer to the last point
+                                // of this segment, reverse this segment
+                                if (lastToLast < lastToFirst) {
+                                    coordinates.reverse();
+                                }
+                                
+                                // Remove duplicate point if segments connect
+                                if (lastToFirst < 0.001 || lastToLast < 0.001) { // ~100 meter tolerance
+                                    coordinates.shift(); // Remove first point to avoid duplication
+                                }
+                            }
+                            
+                            allCoordinates = allCoordinates.concat(coordinates);
+                        }
+                    });
+
+                    if (allCoordinates.length > 0) {
+                        // Create combined trail path
+                        currentTrail = L.polyline(allCoordinates, {
                             color: '#ff6b35',
                             weight: 4,
                             opacity: 0.8
@@ -188,17 +252,19 @@
                         });
 
                         // Fit map to show trail and obstructions
-                        const bounds = L.latLngBounds(coordinates);
+                        const bounds = L.latLngBounds(allCoordinates);
                         obstructions.forEach(obs => {
                             bounds.extend([obs.lat, obs.lng]);
                         });
                         map.fitBounds(bounds, { padding: [20, 20] });
                         
+                        console.log(`Trail loaded: ${wayIdArray.length} segments, ${allCoordinates.length} total points`);
+                        
                     } else {
-                        throw new Error('No geometry data found for this trail');
+                        throw new Error('No geometry data found for any trail segments');
                     }
                 } else {
-                    throw new Error('Trail not found');
+                    throw new Error('No trail segments found');
                 }
                 
             } catch (error) {
@@ -209,13 +275,15 @@
         // Listen for messages from parent window (your Flowfeed app)
         window.addEventListener('message', function(event) {
             if (event.data.type === 'loadTrail') {
-                const { wayId, obstructions } = event.data;
-                loadTrailData(wayId, obstructions || []);
+                const { wayIds, wayId, obstructions } = event.data;
+                // Support both single wayId and multiple wayIds
+                const ids = wayIds || wayId;
+                loadTrailData(ids, obstructions || []);
             }
         });
 
         // Load default trail on startup
-        loadTrailData(wayId);
+        loadTrailData(defaultWayIds);
 
         // Make functions available globally
         window.loadTrailData = loadTrailData;
