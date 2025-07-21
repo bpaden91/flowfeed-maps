@@ -58,18 +58,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     
     <script>
-        // Get URL parameters for customization
-        const urlParams = new URLSearchParams(window.location.search);
-        const trailId = urlParams.get('trail') || 'default';
-        const lat = parseFloat(urlParams.get('lat')) || 36.4734;
-        const lng = parseFloat(urlParams.get('lng')) || -94.1389;
-        const zoom = parseInt(urlParams.get('zoom')) || 15;
-
-        // Initialize the map
-        const map = L.map('map', {
-            zoomControl: true,
-            attributionControl: true
-        }).setView([lat, lng], zoom);
+        // Initialize the map centered on Blowing Springs
+        const map = L.map('map').setView([36.4734, -94.1389], 15);
 
         // Add OpenStreetMap tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -77,18 +67,27 @@
             maxZoom: 19
         }).addTo(map);
 
-        // Trail data structure
-        let currentTrail = null;
-        let obstructionMarkers = [];
+        // Sample trail coordinates for Mad Hatter - Lower
+        const trailCoordinates = [
+            [36.4744, -94.1399],
+            [36.4741, -94.1395],
+            [36.4738, -94.1391],
+            [36.4735, -94.1387],
+            [36.4732, -94.1383],
+            [36.4729, -94.1379],
+            [36.4726, -94.1375],
+            [36.4723, -94.1371],
+            [36.4720, -94.1367]
+        ];
+
+        // Create trail path
+        const trailPath = L.polyline(trailCoordinates, {
+            color: '#ff6b35',
+            weight: 4,
+            opacity: 0.8
+        }).addTo(map);
 
         // Create custom icons
-        const obstructionIcon = L.divIcon({
-            className: 'obstruction-marker',
-            html: '<div class="obstruction-icon">!</div>',
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-        });
-
         const startIcon = L.divIcon({
             className: 'trail-marker',
             html: '<div style="background: #4CAF50; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; font-size: 12px;">S</div>',
@@ -103,44 +102,29 @@
             iconAnchor: [12, 12]
         });
 
-        // Function to load trail data
-        function loadTrailData(trailData) {
-            // Clear existing trail and markers
-            if (currentTrail) {
-                map.removeLayer(currentTrail);
-            }
-            obstructionMarkers.forEach(marker => map.removeLayer(marker));
-            obstructionMarkers = [];
+        const obstructionIcon = L.divIcon({
+            className: 'obstruction-marker',
+            html: '<div style="background: #ff6b35; border: 2px solid white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: bold;">!</div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
 
-            // Add trail path
-            if (trailData.coordinates && trailData.coordinates.length > 0) {
-                currentTrail = L.polyline(trailData.coordinates, {
-                    color: trailData.color || '#ff6b35',
-                    weight: 4,
-                    opacity: 0.8,
-                    smoothFactor: 1
-                }).addTo(map);
+        // Add start and end markers
+        L.marker(trailCoordinates[0], { icon: startIcon })
+            .addTo(map)
+            .bindPopup('<div><h3>Trail Start</h3><p>Mad Hatter - Lower</p></div>');
 
-                // Add start marker
-                L.marker(trailData.coordinates[0], { icon: startIcon })
-                    .addTo(map)
-                    .bindPopup(`<div class="custom-popup"><h3>Trail Start</h3><p>${trailData.name}</p></div>`);
+        L.marker(trailCoordinates[trailCoordinates.length - 1], { icon: endIcon })
+            .addTo(map)
+            .bindPopup('<div><h3>Trail End</h3><p>Mad Hatter - Lower</p></div>');
 
-                // Add end marker
-                L.marker(trailData.coordinates[trailData.coordinates.length - 1], { icon: endIcon })
-                    .addTo(map)
-                    .bindPopup(`<div class="custom-popup"><h3>Trail End</h3><p>${trailData.name}</p></div>`);
+        // Add sample obstruction
+        L.marker([36.4735, -94.1387], { icon: obstructionIcon })
+            .addTo(map)
+            .bindPopup('<div><h3>⚠ Fallen tree/branch</h3><p><strong>Reported:</strong> 7/20/2025</p><p>Large branch blocking trail</p></div>');
 
-                // Fit map to trail bounds
-                map.fitBounds(currentTrail.getBounds(), { padding: [10, 10] });
-            }
-
-            // Add obstruction markers
-            if (trailData.obstructions) {
-                trailData.obstructions.forEach(obstruction => {
-                    const marker = L.marker([obstruction.lat, obstruction.lng], { icon: obstructionIcon })
-                        .addTo(map)
-                        .bindPopup(`
-                            <div class="custom-popup">
-                                <h3>⚠ ${obstruction.type}</h3>
-                                <p>
+        // Fit map to show the entire trail
+        map.fitBounds(trailPath.getBounds(), { padding: [20, 20] });
+    </script>
+</body>
+</html>
